@@ -3,22 +3,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// nodeoutlook.sendEmail({
-//     auth: {
-//         user: "rafa.dyrektorek@outlook.com",
-//         pass: "NowaKarta123"
-//     },
-//     from: 'rafa.dyrektorek@outlook.com',
-//     to: 'rafa.dyrektorek@gmail.com',
-//     subject: 'Hey you, awesome!',
-//     html: '<b>This is bold text</b>',
-//     text: 'This is text version!',
-//     replyTo: 'receiverXXX@gmail.com',
-//     onError: (e) => console.log(e),
-//     onSuccess: (i) => console.log(i)
-// }
-// );
-
 export default function sendEmail(receiver, subject, text) {
   nodeoutlook.sendEmail({
     auth: {
@@ -30,7 +14,7 @@ export default function sendEmail(receiver, subject, text) {
     subject,
     text,
     onError: (e) => console.log(e),
-    onSuccess: (i) => console.log(i),
+    onSuccess: (i) => console.log("Email sent"),
   });
 }
 // sendEmail("rafa.dyrektorek@gmail.com", "AAAA", "aa");
