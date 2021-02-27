@@ -10,6 +10,7 @@ const app = express();
 dotenv.config();
 
 let currentAttempt = 0;
+const knownLinks = [];
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
@@ -17,12 +18,13 @@ app.listen(PORT, () => {
 });
 
 app.get("/start", (req, res) => {
+  if (currentAttempt > 0) return res.send("App is already running. Current attempt is: " + currentAttempt);
   startScript();
   res.status(200).send("App started. Check logs to be sure");
 });
 
 app.get("/keep-alive", (req, res) => {
-  res.status(200).send("Current attempt: " + currentAttempt);
+  res.status(200).send(`Current attempt:  + ${currentAttempt}\n Current known links: ${knownLinks}`);
 });
 
 app.get("*", (req, res) => {
@@ -70,7 +72,6 @@ const startScript = async () => {
   try {
     const { pageMM, pageSaturn, pageIdealo } = await configPages();
 
-    const knownLinks = [];
     while (true) {
       console.log(`Attempt number: ${++currentAttempt}`.grey.inverse);
       await getAvailableProductsFromMMCart(pageMM, knownLinks);
@@ -86,9 +87,10 @@ const startScript = async () => {
 
     await browser.close();
   } catch (error) {
+    sendEmail("rafa.dyrektorek@gmail.com", `There was an error in the app`, error);
     console.log(error);
-    await pageMM.screenshot({ path: "img/error.png" });
-    process.exit(1);
+    // await pageMM.screenshot({ path: "img/error.png" });
+    // process.exit(1);
   }
 };
 
@@ -188,6 +190,14 @@ const checkIdealoForDeals = async (pageIdealo, knownLinks) => {
       "https://www.idealo.de/preisvergleich/ProductCategory/16073F1309393-100611441oE0oJ1.html?p=0.0-1000.0&sortKey=minPrice",
     amd5700xt:
       "https://www.idealo.de/preisvergleich/ProductCategory/16073F1309393-1335211oE0oJ1.html?p=0.0-1000.0&sortKey=minPrice",
+    amd6800:
+      "https://www.idealo.de/preisvergleich/ProductCategory/16073F101603952oE0oJ1.html?sortKey=minPrice",
+    nvidia2060:
+      "https://www.idealo.de/preisvergleich/ProductCategory/16073F1263422oE0oJ1.html?sortKey=minPrice",
+    nvidia2080:
+      "https://www.idealo.de/preisvergleich/ProductCategory/16073F873254oE0oJ1.html?sortKey=minPrice",
+    nvidia3070:
+      "https://www.idealo.de/preisvergleich/ProductCategory/16073F101483660oE0oJ1.html?sortKey=minPrice",
   };
   let emailText = "";
   const linksArray = [];
@@ -196,38 +206,49 @@ const checkIdealoForDeals = async (pageIdealo, knownLinks) => {
     await pageIdealo.goto(link);
     // await pageIdealo.screenshot({ path: "img/idealo.png" });
     const offerListItems = await pageIdealo.$$(".offerList-item");
-    if (offerListItems.length < 1) continue;
+    // if (offerListItems.length < 1) continue;
     for (let offerListItem of offerListItems) {
+      if ((await getTextContentFromElement(offerListItem)).includes("gebraucht")) continue;
       const priceElement = await offerListItem.$(".offerList-item-priceMin");
       const priceBeforeWork = await getTextContentFromElement(priceElement);
 
       let price = priceBeforeWork.trim();
       if (price.includes("ab")) price = price.slice(3).trim().slice(0, -5);
       else price = price.trim().slice(0, -5);
+      if (price.includes(".")) continue;
       switch (name) {
         case "amd5600xt":
-          if (price < 400) {
-            const elementWithinPriceLimit =
-              `\t${price} €: https://www.idealo.de` + (await getLinkFromAnchor(offerListItem));
-            // emailText += elementWithinPriceLimit;
-            linksArray.push(elementWithinPriceLimit);
-            console.log(elementWithinPriceLimit);
-          }
+          await checkIfElementWithinPriceLimit(offerListItem, price, 999);
           break;
         case "amd5700xt":
-          if (price < 450) {
-            const elementWithinPriceLimit =
-              `\t${price} €: https://www.idealo.de` + (await getLinkFromAnchor(offerListItem));
-            // emailText += elementWithinPrice;
-            linksArray.push(elementWithinPriceLimit);
-            console.log(elementWithinPriceLimit);
-          }
+          await checkIfElementWithinPriceLimit(offerListItem, price, 999);
+        case "amd6800":
+          await checkIfElementWithinPriceLimit(offerListItem, price, 999);
+        case "nvidia2060":
+          await checkIfElementWithinPriceLimit(offerListItem, price, 450);
+          break;
+        case "nvidia2080":
+          await checkIfElementWithinPriceLimit(offerListItem, price, 650);
+        case "nvidia3070":
+          await checkIfElementWithinPriceLimit(offerListItem, price, 750);
+          break;
         default:
           break;
       }
     }
 
-    await new Promise((r) => setTimeout(r, 2000));
+    async function checkIfElementWithinPriceLimit(offerListItem, price, priceLimit) {
+      if (price < priceLimit) {
+        // await pageIdealo.screenshot({ path: "img/idealo.png" });
+        const elementWithinPriceLimit =
+          `\t${price} €: https://www.idealo.de` + (await getLinkFromAnchor(offerListItem));
+        // emailText += elementWithinPriceLimit;
+        linksArray.push(elementWithinPriceLimit);
+        console.log(elementWithinPriceLimit);
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 1000));
   }
   for (let link of linksArray) {
     if (!knownLinks.includes(link)) {
